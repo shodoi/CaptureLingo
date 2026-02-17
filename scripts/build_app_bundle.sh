@@ -4,11 +4,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-APP_NAME="SnapLingo"
+APP_NAME="${APP_NAME:-CaptureLingo}"
+APP_DISPLAY_NAME="${APP_DISPLAY_NAME:-Capture Lingo}"
+SOURCE_BIN_NAME="${SOURCE_BIN_NAME:-CaptureLingo}"
 APP_VERSION="${APP_VERSION:-1.0.0}"
-BUNDLE_ID="${BUNDLE_ID:-com.snaplingo.app}"
+BUNDLE_ID="${BUNDLE_ID:-com.capturelingo.app}"
 BUILD_DIR=".build/release"
-BIN_PATH="$BUILD_DIR/$APP_NAME"
+BIN_PATH="$BUILD_DIR/$SOURCE_BIN_NAME"
 APP_DIR="$BUILD_DIR/$APP_NAME.app"
 
 export HOME="$ROOT_DIR/.local-home"
@@ -45,9 +47,9 @@ cat > "$APP_DIR/Contents/Info.plist" <<EOF
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>$APP_NAME</string>
+  <string>$APP_DISPLAY_NAME</string>
   <key>CFBundleDisplayName</key>
-  <string>$APP_NAME</string>
+  <string>$APP_DISPLAY_NAME</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>

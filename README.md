@@ -1,4 +1,4 @@
-# Snap Lingo
+# Capture Lingo
 
 MacOS上で画面の英語テキストを範囲選択し、即座に日本語訳を表示するツール。
 
@@ -24,7 +24,7 @@ MacOS上で画面の英語テキストを範囲選択し、即座に日本語訳
 
 1. `swift build -c release`
 2. `./scripts/build_app_bundle.sh`
-3. 生成物: `.build/release/SnapLingo.app`
+3. 生成物: `.build/release/CaptureLingo.app`
 
 ## 📦 依存関係
 

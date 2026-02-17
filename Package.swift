@@ -4,25 +4,25 @@
 import PackageDescription
 
 let package = Package(
-    name: "SnapLingo",
+    name: "CaptureLingo",
     platforms: [
         .macOS(.v12) // Downgraded to v12 for compatibility
     ],
     products: [
-        .executable(name: "SnapLingo", targets: ["SnapLingo"])
+        .executable(name: "CaptureLingo", targets: ["CaptureLingo"])
     ],
     dependencies: [
         // No external dependencies for now to ensure compatibility
     ],
     targets: [
         .executableTarget(
-            name: "SnapLingo",
+            name: "CaptureLingo",
             dependencies: [],
             resources: []
         ),
         .testTarget(
-            name: "SnapLingoTests",
-            dependencies: ["SnapLingo"]
+            name: "CaptureLingoTests",
+            dependencies: ["CaptureLingo"]
         ),
     ]
 )

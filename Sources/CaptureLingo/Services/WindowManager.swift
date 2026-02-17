@@ -175,7 +175,7 @@ class WindowManager: NSObject, ObservableObject, NSWindowDelegate {
                 backing: .buffered,
                 defer: false
             )
-            window.title = "Snap Lingo Settings"
+            window.title = "Capture Lingo Settings"
             window.level = .floating
             window.hidesOnDeactivate = false
             window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
@@ -205,7 +205,7 @@ class WindowManager: NSObject, ObservableObject, NSWindowDelegate {
     private func showScreenRecordingPermissionAlert() {
         let alert = NSAlert()
         alert.messageText = "Screen Recording Permission Required"
-        alert.informativeText = "Allow screen recording in System Settings > Privacy & Security > Screen Recording, then relaunch SnapLingo."
+        alert.informativeText = "Allow screen recording in System Settings > Privacy & Security > Screen Recording, then relaunch Capture Lingo."
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Open Settings")
         alert.addButton(withTitle: "Cancel")

@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct SnapLingoApp: App {
+struct CaptureLingoApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
