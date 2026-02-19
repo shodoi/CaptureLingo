@@ -1,30 +1,48 @@
 import Vision
 import Cocoa
+import CoreImage
 
 class OCRService {
     static let shared = OCRService()
+    private let ciContext = CIContext(options: nil)
     
     func recognizeText(from image: CGImage, completion: @escaping (Result<OCRTextResult, Error>) -> Void) {
         Task.detached(priority: .userInitiated) {
             do {
                 // Primary OCR path: Google Cloud Vision API.
                 if TranslationService.shared.hasAPIKey {
-                    do {
-                        let cloudResult = try await self.performCloudVisionOCR(image: image)
-                        if self.isUsableOCRText(cloudResult.text) {
-                            if let locale = cloudResult.locale, !locale.isEmpty {
-                                print("Cloud Vision detected locale: \(locale)")
+                    var cloudInputs: [CGImage] = [image]
+                    if let enhancedCloudImage = self.makeCloudRetryImage(from: image) {
+                        cloudInputs.append(enhancedCloudImage)
+                    }
+
+                    var cloudLastError: Error?
+                    for (index, input) in cloudInputs.enumerated() {
+                        do {
+                            let cloudResult = try await self.performCloudVisionOCR(image: input)
+                            let trimmed = cloudResult.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                            print("Cloud Vision OCR pass \(index + 1): \(trimmed.count) chars")
+                            if self.isUsableOCRText(cloudResult.text) {
+                                if let locale = cloudResult.locale, !locale.isEmpty {
+                                    print("Cloud Vision detected locale: \(locale)")
+                                }
+                                completion(.success(OCRTextResult(text: cloudResult.text, detectedLanguage: cloudResult.locale)))
+                                return
                             }
-                            completion(.success(OCRTextResult(text: cloudResult.text, detectedLanguage: cloudResult.locale)))
-                            return
+                        } catch {
+                            cloudLastError = error
+                            print("Cloud Vision OCR pass \(index + 1) failed: \(error)")
                         }
-                    } catch {
-                        print("Cloud Vision OCR fallback to local Vision: \(error)")
+                    }
+
+                    if let cloudLastError {
+                        print("Cloud Vision OCR fallback to local Vision: \(cloudLastError)")
                     }
                 }
 
                 // Fallback OCR path: local Apple Vision.
-                let localResult = try self.performLocalFallbackOCR(image: image)
+                print("OCRService: Local fallback started")
+                let localResult = try self.performBestLocalFallbackOCR(from: image)
                 completion(.success(localResult))
             } catch {
                 completion(.failure(error))
@@ -53,7 +71,7 @@ class OCRService {
             "requests": [
                 [
                     "image": ["content": imageData.base64EncodedString()],
-                    "features": [["type": "DOCUMENT_TEXT_DETECTION"]],
+                    "features": [["type": "TEXT_DETECTION"]],
                     "imageContext": ["languageHints": languageHints]
                 ]
             ]
@@ -98,10 +116,10 @@ class OCRService {
 
     private func encodeImageData(_ image: CGImage) -> Data? {
         let rep = NSBitmapImageRep(cgImage: image)
-        if let jpeg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.9]) {
-            return jpeg
+        if let png = rep.representation(using: .png, properties: [:]) {
+            return png
         }
-        return rep.representation(using: .png, properties: [:])
+        return rep.representation(using: .jpeg, properties: [.compressionFactor: 1.0])
     }
 
     private func extractCloudVisionErrorMessage(from data: Data) -> String {
@@ -178,6 +196,33 @@ class OCRService {
         return OCRTextResult(text: mixedText, detectedLanguage: guessLanguageCode(from: mixedText))
     }
 
+    private func performBestLocalFallbackOCR(from image: CGImage) throws -> OCRTextResult {
+        let variants = makeLocalOCRVariants(from: image)
+        var lastResult = OCRTextResult(text: "", detectedLanguage: nil)
+        var lastError: Error?
+
+        for (index, variant) in variants.enumerated() {
+            do {
+                let result = try performLocalFallbackOCR(image: variant)
+                lastResult = result
+
+                let charCount = result.text.trimmingCharacters(in: .whitespacesAndNewlines).count
+                print("Local Vision OCR pass \(index + 1): \(charCount) chars")
+                if isUsableOCRText(result.text) {
+                    return result
+                }
+            } catch {
+                lastError = error
+                print("Local Vision OCR pass \(index + 1) failed: \(error)")
+            }
+        }
+
+        if let lastError {
+            throw lastError
+        }
+        return lastResult
+    }
+
     private func performOCR(
         image: CGImage,
         recognitionLanguages: [String],
@@ -186,6 +231,7 @@ class OCRService {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = usesLanguageCorrection
+        request.minimumTextHeight = 0.0
 
         let supportedLanguages = try request.supportedRecognitionLanguages()
         let filteredLanguages = recognitionLanguages.filter { supportedLanguages.contains($0) }
@@ -212,6 +258,94 @@ class OCRService {
         }.joined(separator: "\n")
 
         return recognizedText
+    }
+
+    private func makeScaledImage(image: CGImage, scale: CGFloat) -> CGImage? {
+        guard scale > 1 else { return image }
+
+        let width = max(1, Int(CGFloat(image.width) * scale))
+        let height = max(1, Int(CGFloat(image.height) * scale))
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return nil
+        }
+
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
+        return context.makeImage()
+    }
+
+    private func makeCloudRetryImage(from image: CGImage) -> CGImage? {
+        guard let scaled = makeScaledImage(image: image, scale: 2.0) else {
+            return nil
+        }
+        return makeEnhancedImage(image: scaled) ?? scaled
+    }
+
+    private func makeLocalOCRVariants(from image: CGImage) -> [CGImage] {
+        var variants: [CGImage] = [image]
+
+        if let scaled = makeScaledImage(image: image, scale: 2.0) {
+            variants.append(scaled)
+        }
+        if let scaledEnhanced = makeCloudRetryImage(from: image) {
+            variants.append(scaledEnhanced)
+            if let inverted = makeInvertedImage(image: scaledEnhanced) {
+                variants.append(inverted)
+            }
+        }
+        if let enhanced = makeEnhancedImage(image: image) {
+            variants.append(enhanced)
+            if let inverted = makeInvertedImage(image: enhanced) {
+                variants.append(inverted)
+            }
+        }
+
+        return variants
+    }
+
+    private func makeEnhancedImage(image: CGImage) -> CGImage? {
+        let input = CIImage(cgImage: image)
+
+        guard let colorControls = CIFilter(name: "CIColorControls") else {
+            return nil
+        }
+        colorControls.setValue(input, forKey: kCIInputImageKey)
+        colorControls.setValue(0.0, forKey: kCIInputSaturationKey)
+        colorControls.setValue(1.9, forKey: kCIInputContrastKey)
+        colorControls.setValue(0.05, forKey: kCIInputBrightnessKey)
+        guard var output = colorControls.outputImage else {
+            return nil
+        }
+
+        if let sharpen = CIFilter(name: "CISharpenLuminance") {
+            sharpen.setValue(output, forKey: kCIInputImageKey)
+            sharpen.setValue(0.7, forKey: kCIInputSharpnessKey)
+            if let sharpened = sharpen.outputImage {
+                output = sharpened
+            }
+        }
+
+        return ciContext.createCGImage(output, from: output.extent)
+    }
+
+    private func makeInvertedImage(image: CGImage) -> CGImage? {
+        let input = CIImage(cgImage: image)
+        guard let invert = CIFilter(name: "CIColorInvert") else {
+            return nil
+        }
+        invert.setValue(input, forKey: kCIInputImageKey)
+        guard let output = invert.outputImage else {
+            return nil
+        }
+        return ciContext.createCGImage(output, from: output.extent)
     }
 
     private func containsJapanese(_ text: String) -> Bool {

@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct TranslationView: View {
+    private let maxPreviewWidth: CGFloat = 760
+    private let maxPreviewHeight: CGFloat = 260
+
     let originalImage: NSImage
     let recognizedText: String
     let detectedLanguageHint: String?
@@ -28,35 +31,16 @@ struct TranslationView: View {
                 }
                 .buttonStyle(.plain)
                 Spacer()
-            }
-
-            Image(nsImage: originalImage)
-                .resizable()
-                .interpolation(.high)
-                .frame(width: imageDisplaySize.width, height: imageDisplaySize.height)
-            
-            Divider()
-
-            if let errorMessage = errorMessage {
-                Text(errorMessage)
-                    .foregroundColor(.red)
-                    .font(.body)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
                 if let detectedLanguageLabel {
                     Text(detectedLanguageLabel)
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Text(translation)
-                    .font(.system(size: 16))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
             }
+
+            translationContentBox
+
+            imagePreviewBox
             
             HStack {
                 Spacer()
@@ -78,7 +62,7 @@ struct TranslationView: View {
             }
         }
         .padding()
-        .frame(minWidth: max(320, imageDisplaySize.width), alignment: .leading)
+        .frame(minWidth: max(360, previewSize.width), alignment: .leading)
         .background(VisualEffectView(material: .hudWindow, blendingMode: .behindWindow))
         .cornerRadius(12)
         .onAppear {
@@ -129,6 +113,60 @@ struct TranslationView: View {
         translationTask?.cancel()
         translationTask = nil
         isTranslating = false
+    }
+
+    private var translationContentBox: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let errorMessage {
+                Text(errorMessage)
+                    .foregroundColor(.red)
+                    .font(.body)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(translation)
+                    .font(.system(size: 16))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.white.opacity(0.7))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.black.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    private var imagePreviewBox: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(nsImage: originalImage)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .frame(width: previewSize.width, height: previewSize.height, alignment: .leading)
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.white.opacity(0.42))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.black.opacity(0.06), lineWidth: 1)
+        )
+    }
+
+    private var previewSize: CGSize {
+        let sourceWidth = max(1, imageDisplaySize.width)
+        let sourceHeight = max(1, imageDisplaySize.height)
+        let scale = min(1, min(maxPreviewWidth / sourceWidth, maxPreviewHeight / sourceHeight))
+        return CGSize(width: sourceWidth * scale, height: sourceHeight * scale)
     }
 
     private func formatLanguageLabel(_ languageCode: String?) -> String? {

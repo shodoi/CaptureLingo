@@ -31,9 +31,13 @@ struct SelectionView: View {
                                 print("SelectionView: Drag ended")
                                 currentPoint = value.location
                                 updateSelectionRect()
-                                print("Selection completed: \(selectionRect)")
-                                WindowManager.shared.capture(rect: selectionRect)
-                                window?.close()
+                                guard let screenRect = makeScreenSelectionRect() else {
+                                    WindowManager.shared.hideCaptureOverlay()
+                                    return
+                                }
+
+                                print("Selection completed: \(screenRect)")
+                                WindowManager.shared.capture(rect: screenRect)
                             }
                     )
                     .onAppear {
@@ -79,5 +83,17 @@ struct SelectionView: View {
         let height = abs(start.y - end.y)
         
         selectionRect = CGRect(x: x, y: y, width: width, height: height)
+    }
+
+    private func makeScreenSelectionRect() -> CGRect? {
+        guard selectionRect.width >= 2, selectionRect.height >= 2 else {
+            return nil
+        }
+        guard let window, let contentView = window.contentView else {
+            return nil
+        }
+
+        let windowRect = contentView.convert(selectionRect, to: nil)
+        return window.convertToScreen(windowRect)
     }
 }

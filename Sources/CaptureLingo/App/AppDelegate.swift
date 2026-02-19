@@ -38,12 +38,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func startCapture() {
         pendingMenuAction = .capture
-        runPendingMenuActionAfterMenuTracking()
     }
 
     @objc private func openSettings() {
         pendingMenuAction = .settings
-        runPendingMenuActionAfterMenuTracking()
     }
 
     @objc private func quitApp() {
@@ -52,12 +50,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuDidClose(_ menu: NSMenu) {
         runPendingMenuAction()
-    }
-
-    private func runPendingMenuActionAfterMenuTracking() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-            self?.runPendingMenuAction()
-        }
     }
 
     private func runPendingMenuAction() {

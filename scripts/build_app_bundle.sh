@@ -64,14 +64,34 @@ cat > "$APP_DIR/Contents/Info.plist" <<EOF
   <true/>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
+  <key>NSScreenCaptureUsageDescription</key>
+  <string>画面上のテキストを読み取るために画面録画の許可が必要です。</string>
+  <key>NSAccessibilityUsageDescription</key>
+  <string>画面上のテキストを選択・取得するためにアクセシビリティの許可が必要です。</string>
 </dict>
 </plist>
 EOF
 
+# Copy Resources if they exist
+if [ -d "$ROOT_DIR/Resources" ]; then
+    echo "Copying resources..."
+    cp -R "$ROOT_DIR/Resources/"* "$APP_DIR/Contents/Resources/"
+fi
+
+# Copy AppIcon specifically if it exists in a standard location (simplified)
+if [ -f "$ROOT_DIR/Assets/AppIcon.icns" ]; then
+    cp "$ROOT_DIR/Assets/AppIcon.icns" "$APP_DIR/Contents/Resources/"
+elif [ -f "$ROOT_DIR/AppIcon.icns" ]; then
+    cp "$ROOT_DIR/AppIcon.icns" "$APP_DIR/Contents/Resources/"
+fi
+
 printf "APPL????" > "$APP_DIR/Contents/PkgInfo"
 
 if command -v codesign >/dev/null 2>&1; then
-  codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || true
+  CODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
+  codesign --force --deep --sign "$CODESIGN_IDENTITY" \
+    --requirements "=designated => identifier \"$BUNDLE_ID\"" \
+    "$APP_DIR" >/dev/null 2>&1 || true
 fi
 
 echo "Created: $APP_DIR"

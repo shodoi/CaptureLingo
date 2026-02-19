@@ -4,7 +4,7 @@ import SwiftUI
 class WindowManager: NSObject, ObservableObject, NSWindowDelegate {
     static let shared = WindowManager()
     
-    var overlayWindow: OverlayWindow?
+    var overlayWindows: [OverlayWindow] = []
     var resultPanel: NSPanel?
     var settingsWindow: NSWindow?
     private var isCaptureCursorPushed = false
@@ -12,46 +12,73 @@ class WindowManager: NSObject, ObservableObject, NSWindowDelegate {
     private override init() {
         super.init()
     }
-    
-    func showCaptureOverlay() {
-        print("WindowManager: showCaptureOverlay called")
-        guard ScreenCaptureService.shared.ensureScreenRecordingPermission() else {
-            showScreenRecordingPermissionAlert()
-            return
-        }
-        NSApp.setActivationPolicy(.accessory)
-        if overlayWindow == nil {
-            let screenFrame = NSScreen.main?.frame ?? .zero
-            print("WindowManager: Creating overlay with frame: \(screenFrame)")
-            let overlay = OverlayWindow(
-                contentRect: screenFrame,
-                styleMask: [.borderless, .fullSizeContentView],
-                backing: .buffered,
-                defer: false
-            )
-            self.overlayWindow = overlay
-        }
 
+    private func applyCaptureCursor() {
         if !isCaptureCursorPushed {
             NSCursor.crosshair.push()
             isCaptureCursorPushed = true
         }
         NSCursor.crosshair.set()
-        overlayWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    func showCaptureOverlay() {
+        print("WindowManager: showCaptureOverlay called")
+        NSApp.setActivationPolicy(.accessory)
         NSApp.activate(ignoringOtherApps: true)
+        resultPanel?.orderOut(nil)
+        overlayWindows.forEach { $0.close() }
+        overlayWindows.removeAll()
+
+        let screens = NSScreen.screens
+        guard !screens.isEmpty else {
+            print("WindowManager: No screens available for overlay")
+            return
+        }
+
+        for screen in screens {
+            print("WindowManager: Creating overlay for screen frame: \(screen.frame)")
+            let overlay = OverlayWindow(
+                contentRect: screen.frame,
+                styleMask: [.borderless, .fullSizeContentView],
+                backing: .buffered,
+                defer: false
+            )
+            overlayWindows.append(overlay)
+        }
+
+        applyCaptureCursor()
+        if let firstOverlay = overlayWindows.first {
+            firstOverlay.makeMain()
+            firstOverlay.makeKeyAndOrderFront(nil)
+        }
+        overlayWindows.dropFirst().forEach { $0.orderFront(nil) }
+
+        // Menu tracking can reset the cursor to arrow right after the overlay appears.
+        // Re-apply briefly to make the crosshair transition deterministic.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { [weak self] in
+            guard let self, !self.overlayWindows.isEmpty else { return }
+            self.applyCaptureCursor()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+            guard let self, !self.overlayWindows.isEmpty else { return }
+            self.applyCaptureCursor()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            guard let self, !self.overlayWindows.isEmpty else { return }
+            self.applyCaptureCursor()
+        }
         print("WindowManager: Overlay ordered front")
     }
     
     func hideCaptureOverlay() {
         print("WindowManager: hideCaptureOverlay called")
-        overlayWindow?.close()
-        overlayWindow = nil
+        overlayWindows.forEach { $0.close() }
+        overlayWindows.removeAll()
         if isCaptureCursorPushed {
             NSCursor.pop()
             isCaptureCursorPushed = false
-        } else {
-            NSCursor.arrow.set()
         }
+        NSCursor.arrow.set()
     }
     
     func capture(rect: CGRect) {
@@ -60,15 +87,19 @@ class WindowManager: NSObject, ObservableObject, NSWindowDelegate {
             hideCaptureOverlay()
             return
         }
-        hideCaptureOverlay()
-        
-        // Brief delay to allow overlay to disappear completely
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-            guard let image = ScreenCaptureService.shared.capture(rect: rect.integral) else {
+
+        // Hide overlay first, then capture the active Space directly.
+        overlayWindows.forEach { $0.orderOut(nil) }
+        let captureRect = rect.integral
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { [weak self] in
+            guard let image = ScreenCaptureService.shared.capture(rect: captureRect) else {
                 print("WindowManager: Failed to capture image")
+                self?.hideCaptureOverlay()
                 return
             }
-            
+            print("WindowManager: Captured image size: \(image.width)x\(image.height)")
+
+            self?.hideCaptureOverlay()
             self?.processCapturedImage(image, displaySize: rect.size)
         }
     }
@@ -200,20 +231,5 @@ class WindowManager: NSObject, ObservableObject, NSWindowDelegate {
         }
         settingsWindow = nil
         NSApp.setActivationPolicy(.accessory)
-    }
-
-    private func showScreenRecordingPermissionAlert() {
-        let alert = NSAlert()
-        alert.messageText = "Screen Recording Permission Required"
-        alert.informativeText = "Allow screen recording in System Settings > Privacy & Security > Screen Recording, then relaunch Capture Lingo."
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Open Settings")
-        alert.addButton(withTitle: "Cancel")
-
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
-            NSWorkspace.shared.open(url)
-        }
     }
 }
