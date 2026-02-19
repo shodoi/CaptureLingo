@@ -8,6 +8,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var statusItem: NSStatusItem?
     private var pendingMenuAction: PendingMenuAction?
+    private var isStatusMenuOpen = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -37,19 +38,36 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func startCapture() {
-        pendingMenuAction = .capture
+        enqueueMenuAction(.capture)
     }
 
     @objc private func openSettings() {
-        pendingMenuAction = .settings
+        enqueueMenuAction(.settings)
     }
 
     @objc private func quitApp() {
         NSApplication.shared.terminate(nil)
     }
 
+    func menuWillOpen(_ menu: NSMenu) {
+        isStatusMenuOpen = true
+    }
+
     func menuDidClose(_ menu: NSMenu) {
+        isStatusMenuOpen = false
         runPendingMenuAction()
+    }
+
+    private func enqueueMenuAction(_ action: PendingMenuAction) {
+        pendingMenuAction = action
+
+        // On newer macOS versions, menuDidClose can fire before item actions.
+        // Retry on the next runloop and execute only after the menu has closed.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            guard !self.isStatusMenuOpen else { return }
+            self.runPendingMenuAction()
+        }
     }
 
     private func runPendingMenuAction() {

@@ -8,10 +8,18 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section(header: Text("Google Cloud APIs")) {
-                SecureField("API Key", text: $apiKey)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .frame(width: 300)
-                    .focused($isAPIKeyFieldFocused)
+                HStack(spacing: 8) {
+                    SecureField("API Key", text: $apiKey)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .frame(width: 300)
+                        .focused($isAPIKeyFieldFocused)
+
+                    Button("Paste") {
+                        pasteAPIKeyFromClipboard()
+                    }
+                    .keyboardShortcut("v", modifiers: [.command])
+                    .help("Paste API key from clipboard (⌘V)")
+                }
                 
                 Button("Save API Key") {
                     TranslationService.shared.setAPIKey(apiKey)
@@ -42,5 +50,13 @@ struct SettingsView: View {
                 isAPIKeyFieldFocused = true
             }
         }
+    }
+
+    private func pasteAPIKeyFromClipboard() {
+        guard let value = NSPasteboard.general.string(forType: .string), !value.isEmpty else {
+            return
+        }
+        apiKey = value
+        isAPIKeyFieldFocused = true
     }
 }
