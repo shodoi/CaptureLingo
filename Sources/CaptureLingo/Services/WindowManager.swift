@@ -140,7 +140,7 @@ class WindowManager: NSObject, ObservableObject, NSWindowDelegate {
         NSApp.setActivationPolicy(.accessory)
         if resultPanel == nil {
             let panel = ResultPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 600, height: 480),
+                contentRect: NSRect(x: 0, y: 0, width: 580, height: 480),
                 styleMask: [.borderless, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
@@ -156,7 +156,7 @@ class WindowManager: NSObject, ObservableObject, NSWindowDelegate {
             panel.center()
             self.resultPanel = panel
         }
-        
+
         let pointSize = NSSize(width: max(1, displaySize.width), height: max(1, displaySize.height))
         let nsImage = NSImage(cgImage: image, size: pointSize)
         let contentView = NSHostingController(
@@ -201,12 +201,12 @@ class WindowManager: NSObject, ObservableObject, NSWindowDelegate {
     func showSettings() {
         if settingsWindow == nil {
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 400, height: 250),
+                contentRect: NSRect(x: 0, y: 0, width: 420, height: 280),
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false
             )
-            window.title = "Capture Lingo Settings"
+            window.title = "Snap Lingo Settings"
             window.level = .floating
             window.hidesOnDeactivate = false
             window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
@@ -215,7 +215,7 @@ class WindowManager: NSObject, ObservableObject, NSWindowDelegate {
             window.delegate = self
             self.settingsWindow = window
         }
-        
+
         let contentView = NSHostingController(rootView: SettingsView())
         settingsWindow?.contentViewController = contentView
 

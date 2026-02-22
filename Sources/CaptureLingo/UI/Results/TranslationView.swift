@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct TranslationView: View {
-    private let maxPreviewWidth: CGFloat = 760
-    private let maxPreviewHeight: CGFloat = 260
+    private let maxPreviewWidth: CGFloat = 680
+    private let maxPreviewHeight: CGFloat = 200
 
     let originalImage: NSImage
     let recognizedText: String
@@ -13,10 +13,12 @@ struct TranslationView: View {
     @State private var detectedLanguageLabel: String?
     @State private var isTranslating: Bool = false
     @State private var translationTask: Task<Void, Never>?
-    
+    @State private var copyFeedback: Bool = false
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
+        VStack(alignment: .leading, spacing: 16) {
+            // Header row: close dot + language badge
+            HStack(alignment: .center) {
                 Button {
                     WindowManager.shared.closeResultPanel()
                 } label: {
@@ -25,44 +27,83 @@ struct TranslationView: View {
                             .fill(Color(red: 0.97, green: 0.32, blue: 0.31))
                             .frame(width: 14, height: 14)
                         Image(systemName: "xmark")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundColor(.white.opacity(0.9))
+                            .font(.system(size: 7, weight: .bold))
+                            .foregroundColor(.white.opacity(0.85))
                     }
                 }
                 .buttonStyle(.plain)
+                .help("Close")
+
                 Spacer()
+
                 if let detectedLanguageLabel {
                     Text(detectedLanguageLabel)
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
             }
 
-            translationContentBox
+            // Translation text
+            GroupBox {
+                HStack(alignment: .top, spacing: 0) {
+                    Text(errorMessage ?? translation)
+                        .font(.body)
+                        .foregroundColor(errorMessage != nil ? .red : .primary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
 
-            imagePreviewBox
-            
+                    Spacer(minLength: 8)
+
+                    Button {
+                        copyTranslationToClipboard()
+                    } label: {
+                        Image(systemName: copyFeedback ? "checkmark" : "doc.on.doc")
+                            .foregroundColor(copyFeedback ? .green : .secondary)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Copy")
+                }
+                .padding(4)
+            }
+
+            // Source image preview (capped height, never upscaled)
+            GroupBox {
+                let size = previewSize
+                Image(nsImage: originalImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: size.width, maxHeight: size.height)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+
+            // Action buttons
             HStack {
                 Spacer()
+
                 if isTranslating {
-                    Button("Stop") {
-                        cancelTranslation()
-                    }
+                    ProgressView()
+                        .controlSize(.small)
+                        .padding(.trailing, 4)
                 }
+
                 Button("Capture Again") {
                     cancelTranslation()
                     WindowManager.shared.closeResultPanel()
                     WindowManager.shared.showCaptureOverlay()
                 }
-                Button("Copy") {
-                    let pasteboard = NSPasteboard.general
-                    pasteboard.clearContents()
-                    pasteboard.setString(translation, forType: .string)
+                .keyboardShortcut("r", modifiers: [.command])
+
+                Button("Close") {
+                    cancelTranslation()
+                    WindowManager.shared.closeResultPanel()
                 }
+                .keyboardShortcut(.cancelAction)
             }
         }
         .padding()
-        .frame(minWidth: max(360, previewSize.width), alignment: .leading)
+        .frame(minWidth: 480, idealWidth: 560)
         .background(VisualEffectView(material: .hudWindow, blendingMode: .behindWindow))
         .cornerRadius(12)
         .onAppear {
@@ -73,7 +114,19 @@ struct TranslationView: View {
             cancelTranslation()
         }
     }
-    
+
+    // MARK: - Helpers
+
+    private var previewSize: CGSize {
+        let sw = max(1, imageDisplaySize.width)
+        let sh = max(1, imageDisplaySize.height)
+        var w = sw
+        var h = sh
+        if w > maxPreviewWidth { let r = maxPreviewWidth / w; w = maxPreviewWidth; h *= r }
+        if h > maxPreviewHeight { let r = maxPreviewHeight / h; h = maxPreviewHeight; w *= r }
+        return CGSize(width: w, height: h)
+    }
+
     private func startTranslation() {
         guard translationTask == nil else { return }
         isTranslating = true
@@ -115,58 +168,12 @@ struct TranslationView: View {
         isTranslating = false
     }
 
-    private var translationContentBox: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let errorMessage {
-                Text(errorMessage)
-                    .foregroundColor(.red)
-                    .font(.body)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
-                Text(translation)
-                    .font(.system(size: 16))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.white.opacity(0.7))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.black.opacity(0.08), lineWidth: 1)
-        )
-    }
-
-    private var imagePreviewBox: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Image(nsImage: originalImage)
-                .resizable()
-                .interpolation(.high)
-                .scaledToFit()
-                .frame(width: previewSize.width, height: previewSize.height, alignment: .leading)
-        }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.white.opacity(0.42))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.black.opacity(0.06), lineWidth: 1)
-        )
-    }
-
-    private var previewSize: CGSize {
-        let sourceWidth = max(1, imageDisplaySize.width)
-        let sourceHeight = max(1, imageDisplaySize.height)
-        let scale = min(1, min(maxPreviewWidth / sourceWidth, maxPreviewHeight / sourceHeight))
-        return CGSize(width: sourceWidth * scale, height: sourceHeight * scale)
+    private func copyTranslationToClipboard() {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(translation, forType: .string)
+        copyFeedback = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copyFeedback = false }
     }
 
     private func formatLanguageLabel(_ languageCode: String?) -> String? {
@@ -177,36 +184,34 @@ struct TranslationView: View {
             .lowercased()
         guard !normalized.isEmpty else { return nil }
 
-        // Prefer explicit naming for Traditional Chinese (Taiwan).
         if normalized == "zh-tw" || normalized == "zh-hant-tw" {
             return "Language: 繁体中文（台湾）"
         }
-
         if let exact = Locale.current.localizedString(forIdentifier: normalized), !exact.isEmpty {
             return "Language: \(exact)"
         }
-
-        let baseCode = normalized.split(separator: "-").first.map(String.init) ?? normalized
-        if let base = Locale.current.localizedString(forLanguageCode: baseCode), !base.isEmpty {
-            return "Language: \(base)"
+        let base = normalized.split(separator: "-").first.map(String.init) ?? normalized
+        if let name = Locale.current.localizedString(forLanguageCode: base), !name.isEmpty {
+            return "Language: \(name)"
         }
-
         return "Language: \(normalized)"
     }
 }
 
+// MARK: - NSVisualEffectView wrapper
+
 struct VisualEffectView: NSViewRepresentable {
     let material: NSVisualEffectView.Material
     let blendingMode: NSVisualEffectView.BlendingMode
-    
+
     func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = material
-        view.blendingMode = blendingMode
-        view.state = .active
-        return view
+        let v = NSVisualEffectView()
+        v.material = material
+        v.blendingMode = blendingMode
+        v.state = .active
+        return v
     }
-    
+
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
         nsView.material = material
         nsView.blendingMode = blendingMode
